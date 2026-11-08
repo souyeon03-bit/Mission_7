@@ -1,0 +1,906 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>화학 실험 반응물 당량 및 투입량 계산기</title>
+<style>
+  :root{
+    --bg:#f4f7fa; --card:#ffffff; --text:#1f2937; --muted:#6b7280; --line:#d9e0e8;
+    --accent:#0f766e; --accent-d:#0b5a54; --head:#e6f2f1; --base:#f0f9f8; --err:#d92d20; --errbg:#fff1f0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;line-height:1.5}
+  .wrap{max-width:1000px;margin:0 auto;padding:28px 16px 48px}
+  h1{font-size:1.5rem;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 20px;font-size:.92rem}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .settings{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .settings label{font-weight:600}
+  select,input[type=text]{font:inherit;color:inherit;border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 9px}
+  select:focus,input:focus{outline:2px solid var(--accent);outline-offset:-1px}
+  .table-scroll{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{width:100%;border-collapse:collapse;min-width:760px;font-size:.95rem}
+  th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:middle}
+  th{background:var(--head);font-weight:700;white-space:nowrap}
+  tr:last-child td{border-bottom:none}
+  tr.base-row td{background:var(--base)}
+  td input[type=text]{width:100%;min-width:80px}
+  td input.bad{border-color:var(--err);background:var(--errbg)}
+  .badge{display:inline-block;background:var(--accent);color:#fff;border-radius:999px;padding:2px 10px;font-size:.82rem;font-weight:600;white-space:nowrap}
+  .with-unit{display:flex;align-items:center;gap:6px}
+  .with-unit span{color:var(--muted);white-space:nowrap}
+  .out{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+  .out.err{color:var(--err);font-weight:600}
+  .out.dash{color:var(--muted);font-weight:400}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#fff;padding:8px 14px;color:var(--text)}
+  button:hover:not(:disabled){background:#f1f5f9}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.primary:hover{background:var(--accent-d)!important}
+  button.danger{color:var(--err)}
+  button.icon{padding:5px 10px}
+  .spacer{flex:1}
+  .pager{display:none;align-items:center;justify-content:center;gap:12px;margin-top:14px}
+  .pager.show{display:flex}
+  .note{margin-top:18px;color:var(--muted);font-size:.85rem}
+  .note code{background:#eef2f6;padding:1px 5px;border-radius:4px}
+
+  /* ===== 인트로(슬라이드 스위치) & 마스코트 ===== */
+  #intro{position:fixed;inset:0;z-index:1000;display:flex;align-items:center;justify-content:center;
+    background:rgba(244,247,250,.55);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    transition:opacity .45s ease}
+  #intro.hide{opacity:0;pointer-events:none}
+  .intro-card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:30px 28px 26px;
+    text-align:center;box-shadow:0 12px 40px rgba(15,118,110,.18);width:min(92vw,360px);
+    transition:opacity .4s ease, transform .4s ease}
+  .intro-card.gone{opacity:0;transform:scale(.94);pointer-events:none}
+  .intro-card .emoji{font-size:2.2rem;margin-bottom:6px}
+  .intro-card h2{margin:0 0 18px;font-size:1.25rem}
+  .intro-card .hint{margin:14px 0 0;font-size:.82rem;color:var(--muted)}
+  .slide{position:relative;height:52px;border-radius:999px;background:#e5e9ee;padding:4px;user-select:none;-webkit-user-select:none;touch-action:none;overflow:hidden}
+  .slide .fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#5eead4,var(--accent));border-radius:999px;transition:width .25s ease}
+  .slide .label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding-left:40px;
+    color:#6b7280;font-size:.9rem;font-weight:600;pointer-events:none;transition:opacity .2s}
+  .slide.on .label{opacity:0}
+  .slide .knob{position:relative;z-index:2;width:44px;height:44px;border-radius:50%;background:#fff;
+    box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;
+    font-size:1.15rem;cursor:grab;touch-action:none;transition:transform .25s ease}
+  .slide .knob.drag{cursor:grabbing;transition:none}
+  .slide.drag-active .fill{transition:none}
+  .slide .knob:focus-visible{outline:3px solid var(--accent-d);outline-offset:2px}
+
+  #mascot{position:fixed;z-index:1100;top:50%;left:50%;width:220px;pointer-events:none;
+    transform:translate(-50%,-50%) scale(.3);opacity:0;text-align:center}
+  #mascot.show{opacity:1;transform:translate(-50%,-50%) scale(1);
+    transition:opacity .3s ease, transform .45s cubic-bezier(.34,1.56,.64,1)}
+  #mascot.docked{top:calc(100% - 62px);left:calc(100% - 62px);transform:translate(-50%,-50%) scale(.4);
+    transition:top 1s cubic-bezier(.65,0,.35,1), left 1s cubic-bezier(.65,0,.35,1), transform 1s cubic-bezier(.65,0,.35,1)}
+  #mascot .art{display:block;width:100%;height:auto;filter:drop-shadow(0 8px 14px rgba(0,0,0,.2))}
+  #mascot .art img{width:100%;height:auto;display:block}
+  #mascot .say{display:inline-block;margin-top:6px;background:#fff;border:2px solid var(--accent);color:var(--accent-d);
+    font-weight:800;border-radius:999px;padding:4px 14px;font-size:1.05rem;transition:opacity .3s}
+  #mascot.docked .say{opacity:0}
+  @media (prefers-reduced-motion:reduce){
+    #mascot.show,#mascot.docked{transition-duration:.01s}
+  }
+
+  /* ===== 시약명 자동완성 드롭다운 ===== */
+  #acList{position:fixed;z-index:900;display:none;background:#fff;border:1px solid var(--line);border-radius:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,.14);padding:4px;max-height:220px;overflow-y:auto;
+    overscroll-behavior:contain;-webkit-overflow-scrolling:touch;touch-action:pan-y;outline:none}
+  #acList .ac-item{padding:7px 10px;border-radius:7px;cursor:pointer;font-size:.93rem;white-space:nowrap;display:flex;gap:8px;align-items:baseline}
+  #acList .ac-item .ko{color:var(--muted);font-size:.8rem}
+  #acList .ac-item .mw{margin-left:auto;padding-left:18px;color:var(--accent-d);font-size:.8rem;font-weight:600;
+    font-variant-numeric:tabular-nums}
+  #acList .ac-item.active,#acList .ac-item:hover{background:var(--head)}
+  #acList .ac-item mark{background:transparent;color:var(--accent-d);font-weight:700}
+
+  /* ===== 행 삭제 버튼 줄바꿈 방지 ===== */
+  table tr > td:last-child, table tr > th:last-child{white-space:nowrap;width:1%}
+  button.icon{white-space:nowrap}
+
+  /* ===== 클릭 가능한 마스코트 & 실험복 ===== */
+  #mascot.ready{pointer-events:auto;cursor:pointer;-webkit-tap-highlight-color:transparent}
+  #mascot.docked.ready{transition:transform .2s ease}
+  #mascot.docked.ready:hover,#mascot.docked.coat-on{transform:translate(-50%,-50%) scale(.46)}
+  #mascot.ready:focus-visible{outline:3px solid var(--accent);outline-offset:4px;border-radius:16px}
+  #mascot .coat{display:none}
+  #mascot.coat-on .coat{display:inline}
+
+  /* ===== 실험 메모장 ===== */
+  #memo{position:fixed;z-index:1090;right:16px;bottom:132px;width:min(92vw,330px);background:#fffdf5;
+    border:1px solid #e7dfb8;border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.22);display:none;
+    flex-direction:column;overflow:hidden;transform-origin:bottom right}
+  #memo.open{display:flex;animation:memoIn .22s ease}
+  @keyframes memoIn{from{opacity:0;transform:translateY(10px) scale(.96)}to{opacity:1;transform:none}}
+  #memo header{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;
+    background:#fdf3c4;border-bottom:1px solid #e7dfb8;font-weight:700}
+  #memo header button{padding:2px 9px;border-radius:6px;line-height:1.2;font-size:1.1rem;background:transparent}
+  #memo textarea{border:none;resize:none;height:200px;padding:6px 12px;font:inherit;font-size:.95rem;
+    line-height:28px;color:var(--text);outline:none;
+    background:repeating-linear-gradient(#fffdf5,#fffdf5 27px,#efe8c6 28px);background-attachment:local}
+  #memo footer{padding:6px 12px;font-size:.78rem;color:var(--muted);border-top:1px solid #efe8c6}
+</style>
+</head>
+<body>
+<div class="wrap" id="app" inert>
+  <h1>🧪 화학 실험 반응물 당량 및 투입량 계산기 ⚗️</h1>
+  <p class="sub">기준 시약의 질량과 분자량을 입력하면 반응 시약의 투입 질량과 물질량이 자동으로 계산됩니다.</p>
+
+  <div class="card">
+    <div class="settings">
+      <label for="unit">기준 물질 질량 단위</label>
+      <select id="unit">
+        <option value="mg">mg</option>
+        <option value="g">g</option>
+      </select>
+    </div>
+
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>구분</th>
+            <th>시약명</th>
+            <th>분자량(MW)</th>
+            <th>당량(eq)</th>
+            <th>투입 질량</th>
+            <th>물질량(mmol)</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="pager" id="pager">
+      <button id="prev">이전</button>
+      <span id="pageInfo"></span>
+      <button id="next">다음</button>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="add">반응물 추가 ➕</button>
+      <button id="csv">CSV 다운로드 📄</button>
+      <span class="spacer"></span>
+      <button class="danger" id="reset">초기화 🔄</button>
+    </div>
+  </div>
+
+  <p class="note">
+    계산식: 물질량(mmol) = 질량(mg) ÷ MW · 반응 시약 물질량 = 기준 물질량 × 당량 · 투입 질량 = 물질량 × MW.
+    결과는 소수점 둘째 자리까지 표시됩니다. 입력값은 이 브라우저에 자동 저장됩니다.
+  </p>
+</div>
+
+<!-- 인트로: 슬라이드 스위치 -->
+<div id="intro">
+  <div class="intro-card" id="introCard">
+    <div class="emoji">🧪</div>
+    <h2>실험을 시작하겠습니까?</h2>
+    <div class="slide" id="slide">
+      <div class="fill" id="slideFill"></div>
+      <div class="label">밀어서 실험 시작 ➜</div>
+      <div class="knob" id="knob" role="switch" aria-checked="false" aria-label="실험 시작 스위치" tabindex="0">⚗️</div>
+    </div>
+    <p class="hint">스위치를 오른쪽 끝까지 드래그하세요</p>
+  </div>
+</div>
+
+<!-- 마스코트 팝업 (직접 그린 오리지널 토끼 SVG) -->
+<div id="mascot" aria-hidden="true">
+  <div class="art" id="mascotArt">
+    <svg viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="62" cy="62" rx="20" ry="52" fill="#f3e8ff" stroke="#7c3aed" stroke-width="4" transform="rotate(-12 62 62)"/>
+      <ellipse cx="138" cy="62" rx="20" ry="52" fill="#f3e8ff" stroke="#7c3aed" stroke-width="4" transform="rotate(12 138 62)"/>
+      <ellipse cx="62" cy="66" rx="9" ry="34" fill="#fbcfe8" transform="rotate(-12 62 66)"/>
+      <ellipse cx="138" cy="66" rx="9" ry="34" fill="#fbcfe8" transform="rotate(12 138 66)"/>
+      <ellipse cx="100" cy="175" rx="48" ry="38" fill="#faf5ff" stroke="#7c3aed" stroke-width="4"/>
+      <g class="coat">
+        <ellipse cx="52" cy="178" rx="13" ry="24" fill="#fff" stroke="#7c3aed" stroke-width="3.5" transform="rotate(12 52 178)"/>
+        <ellipse cx="148" cy="178" rx="13" ry="24" fill="#fff" stroke="#7c3aed" stroke-width="3.5" transform="rotate(-12 148 178)"/>
+        <path d="M54 176 Q52 208 74 214 L126 214 Q148 208 146 176 Q100 200 54 176 Z" fill="#fff" stroke="#7c3aed" stroke-width="4" stroke-linejoin="round"/>
+        <path d="M100 190 L100 214" stroke="#7c3aed" stroke-width="3"/>
+        <path d="M82 180 L100 199 L118 180" fill="#e0f2fe" stroke="#7c3aed" stroke-width="3" stroke-linejoin="round"/>
+        <circle cx="94" cy="203" r="2.4" fill="#0f766e"/>
+        <circle cx="94" cy="210" r="2.4" fill="#0f766e"/>
+        <rect x="110" y="198" width="18" height="12" rx="2" fill="#fff" stroke="#7c3aed" stroke-width="2.5"/>
+        <rect x="118" y="191" width="3.4" height="10" rx="1.5" fill="#0f766e"/>
+      </g>
+      <ellipse cx="100" cy="125" rx="62" ry="54" fill="#faf5ff" stroke="#7c3aed" stroke-width="4"/>
+      <circle cx="74" cy="122" r="7" fill="#1f2937"/>
+      <circle cx="126" cy="122" r="7" fill="#1f2937"/>
+      <circle cx="76" cy="119" r="2.4" fill="#fff"/>
+      <circle cx="128" cy="119" r="2.4" fill="#fff"/>
+      <ellipse cx="58" cy="140" rx="11" ry="7" fill="#f9a8d4" opacity=".75"/>
+      <ellipse cx="142" cy="140" rx="11" ry="7" fill="#f9a8d4" opacity=".75"/>
+      <path d="M94 136 Q100 142 106 136" fill="none" stroke="#1f2937" stroke-width="3" stroke-linecap="round"/>
+      <path d="M100 142 Q100 152 90 152 M100 142 Q100 152 110 152" fill="none" stroke="#1f2937" stroke-width="3" stroke-linecap="round"/>
+      <g class="coat">
+        <rect x="62" y="78" width="76" height="16" rx="8" fill="#bae6fd" fill-opacity=".75" stroke="#0f766e" stroke-width="3"/>
+        <path d="M62 86 Q50 86 48 98 M138 86 Q150 86 152 98" stroke="#0f766e" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </g>
+      <circle cx="152" cy="186" r="12" fill="#fff" stroke="#7c3aed" stroke-width="3"/>
+      <text x="100" y="212" text-anchor="middle" font-size="22">🧪</text>
+    </svg>
+  </div>
+  <div class="say">실험 시작~!</div>
+</div>
+
+<!-- 실험 메모장 팝업 -->
+<div id="memo" role="dialog" aria-label="실험 메모장">
+  <header>
+    <span>📝 실험 메모장</span>
+    <button type="button" id="memoClose" aria-label="메모장 닫기">×</button>
+  </header>
+  <textarea id="memoText" placeholder="실험 메모를 자유롭게 적어 보세요." spellcheck="false"></textarea>
+  <footer id="memoStatus">자동 저장됩니다</footer>
+</div>
+
+<script>
+(function(){
+  var KEY = 'chemCalcState_v1';
+  var PAGE_SIZE = 10;
+  var ERR = '숫자 입력 필요';
+  var TYPE_LABEL = { reagent: '반응 시약', catalyst: '촉매', solvent: '용매(mL)' };
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+  function newRow(type){ return { id: uid(), type: type || 'reagent', name: '', mw: '', eq: '', vol: '' }; }
+  function defaultState(){
+    return { unit: 'mg', rows: [ { id: uid(), type: 'base', name: '', mw: '', mass: '' }, newRow() ] };
+  }
+
+  function loadState(){
+    try{
+      var raw = localStorage.getItem(KEY);
+      if(!raw) return defaultState();
+      var s = JSON.parse(raw);
+      if(!s || !Array.isArray(s.rows) || !s.rows.length || s.rows[0].type !== 'base') return defaultState();
+      s.unit = s.unit === 'g' ? 'g' : 'mg';
+      s.rows = s.rows.map(function(r, i){
+        return {
+          id: String(r.id || uid()),
+          type: i === 0 ? 'base' : (TYPE_LABEL[r.type] ? r.type : 'reagent'),
+          name: String(r.name || ''), mw: String(r.mw || ''), eq: String(r.eq || ''),
+          vol: String(r.vol || ''), mass: String(r.mass || '')
+        };
+      });
+      return s;
+    }catch(e){ return defaultState(); }
+  }
+  function saveState(){
+    try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){}
+  }
+
+  var state = loadState();
+  var page = 1;
+  var tbody = document.getElementById('tbody');
+  var unitSel = document.getElementById('unit');
+
+  /* ---------- 숫자 검증 ---------- */
+  function parseNum(str){
+    var s = String(str == null ? '' : str).trim().replace(/,/g, '');
+    if(s === '') return { empty: true, ok: false };
+    if(!/^[+-]?(\d+\.?\d*|\.\d+)$/.test(s)) return { ok: false, msg: ERR };
+    var n = Number(s);
+    if(!(n > 0)) return { ok: false, msg: '0보다 큰 값 필요' };
+    return { ok: true, n: n };
+  }
+  function fmt(n){ return n.toFixed(2); }
+  function unitFactor(){ return state.unit === 'g' ? 1000 : 1; } // 선택 단위 → mg
+
+  /* ---------- 계산 ---------- */
+  function baseInfo(){
+    var b = state.rows[0];
+    var pm = parseNum(b.mass), pw = parseNum(b.mw);
+    var info = { massP: pm, mwP: pw, empty: pm.empty && pw.empty, ok: pm.ok && pw.ok };
+    if(info.ok){ info.mmol = (pm.n * unitFactor()) / pw.n; }
+    return info;
+  }
+
+  function computeRow(r, base){
+    var res = { mass: '-', mmol: '-', err: false, bad: {} };
+    if(r.type === 'base'){
+      if(base.empty) return res;
+      if(!base.massP.ok) res.bad.mass = true;
+      if(!base.mwP.ok) res.bad.mw = true;
+      if(!base.ok){
+        var m = (!base.massP.ok ? base.massP.msg : base.mwP.msg);
+        res.mmol = m; res.err = true;
+      } else {
+        res.mmol = fmt(base.mmol) + ' mmol';
+      }
+      return res;
+    }
+    if(r.type === 'solvent'){
+      var pv = parseNum(r.vol);
+      if(pv.empty) return res;
+      if(!pv.ok){ res.bad.vol = true; res.mass = pv.msg; res.err = true; return res; }
+      res.mass = fmt(pv.n) + ' mL';
+      return res;
+    }
+    var pw = parseNum(r.mw), pe = parseNum(r.eq);
+    if(pw.empty && pe.empty) return res;
+    if(!pw.ok || !pe.ok){
+      if(!pw.ok) res.bad.mw = true;
+      if(!pe.ok) res.bad.eq = true;
+      var msg = !pw.ok ? pw.msg : pe.msg;
+      res.mass = msg; res.mmol = msg; res.err = true;
+      return res;
+    }
+    if(!base.ok){
+      res.mass = '기준 시약 입력 필요'; res.mmol = '기준 시약 입력 필요'; res.err = true;
+      return res;
+    }
+    var mmol = base.mmol * pe.n;
+    var massMg = mmol * pw.n;
+    res.mass = fmt(massMg / unitFactor()) + ' ' + state.unit;
+    res.mmol = fmt(mmol) + ' mmol';
+    return res;
+  }
+
+  function setOut(el, text, err){
+    el.textContent = text;
+    el.className = el.className.split(' ')[0] + ' out' + (err ? ' err' : (text === '-' ? ' dash' : ''));
+    el.className = 'out' + (err ? ' err' : (text === '-' ? ' dash' : ''));
+  }
+
+  function updateOutputs(){
+    var base = baseInfo();
+    Array.prototype.forEach.call(tbody.querySelectorAll('tr'), function(tr){
+      var row = state.rows.filter(function(r){ return r.id === tr.dataset.id; })[0];
+      if(!row) return;
+      var res = computeRow(row, base);
+      var om = tr.querySelector('[data-out="mass"]');
+      if(om) setOut(om, res.mass, res.err);
+      var on = tr.querySelector('[data-out="mmol"]');
+      if(on) setOut(on, res.mmol, res.err);
+      Array.prototype.forEach.call(tr.querySelectorAll('input[data-field]'), function(inp){
+        inp.classList.toggle('bad', !!res.bad[inp.dataset.field]);
+      });
+    });
+  }
+
+  /* ---------- 렌더링 ---------- */
+  function mkInput(row, field, placeholder){
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    if(field !== 'name') inp.setAttribute('inputmode', 'decimal');
+    inp.autocomplete = 'off';
+    inp.placeholder = placeholder || '';
+    inp.value = row[field] || '';
+    inp.dataset.field = field;
+    inp.addEventListener('input', function(){
+      row[field] = inp.value;
+      saveState();
+      updateOutputs();
+    });
+    return inp;
+  }
+  function cell(child){
+    var td = document.createElement('td');
+    if(typeof child === 'string') td.textContent = child; else if(child) td.appendChild(child);
+    return td;
+  }
+  function outSpan(kind){
+    var s = document.createElement('span');
+    s.className = 'out dash'; s.dataset.out = kind; s.textContent = '-';
+    return s;
+  }
+
+  function buildRow(r){
+    var tr = document.createElement('tr');
+    tr.dataset.id = r.id;
+    var isBase = r.type === 'base';
+    if(isBase) tr.className = 'base-row';
+
+    // 구분
+    if(isBase){
+      var badge = document.createElement('span');
+      badge.className = 'badge'; badge.textContent = '기준 시약';
+      tr.appendChild(cell(badge));
+    } else {
+      var sel = document.createElement('select');
+      Object.keys(TYPE_LABEL).forEach(function(k){
+        var o = document.createElement('option');
+        o.value = k; o.textContent = TYPE_LABEL[k];
+        if(k === r.type) o.selected = true;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', function(){
+        r.type = sel.value; saveState(); render();
+      });
+      tr.appendChild(cell(sel));
+    }
+
+    // 시약명
+    tr.appendChild(cell(mkInput(r, 'name', r.type === 'solvent' ? '용매명' : '시약명')));
+
+    // 분자량
+    if(r.type === 'solvent') tr.appendChild(cell('-'));
+    else tr.appendChild(cell(mkInput(r, 'mw', 'g/mol')));
+
+    // 당량 (용매는 부피)
+    if(isBase) tr.appendChild(cell('1.00'));
+    else if(r.type === 'solvent') tr.appendChild(cell(mkInput(r, 'vol', '부피(mL)')));
+    else tr.appendChild(cell(mkInput(r, 'eq', 'eq')));
+
+    // 투입 질량
+    if(isBase){
+      var wrap = document.createElement('div');
+      wrap.className = 'with-unit';
+      wrap.appendChild(mkInput(r, 'mass', '질량'));
+      var u = document.createElement('span');
+      u.className = 'unit-label'; u.textContent = state.unit;
+      wrap.appendChild(u);
+      tr.appendChild(cell(wrap));
+    } else {
+      tr.appendChild(cell(outSpan('mass')));
+    }
+
+    // 물질량
+    tr.appendChild(cell(outSpan('mmol')));
+
+    // 삭제
+    if(isBase){
+      tr.appendChild(cell(''));
+    } else {
+      var del = document.createElement('button');
+      del.className = 'icon'; del.textContent = '행 삭제 🗑️'; del.title = '행 삭제';
+      del.addEventListener('click', function(){
+        state.rows = state.rows.filter(function(x){ return x.id !== r.id; });
+        saveState(); render();
+      });
+      tr.appendChild(cell(del));
+    }
+    return tr;
+  }
+
+  function totalPages(){ return Math.max(1, Math.ceil(state.rows.length / PAGE_SIZE)); }
+
+  function render(){
+    var tp = totalPages();
+    if(page > tp) page = tp;
+    if(page < 1) page = 1;
+    unitSel.value = state.unit;
+    tbody.innerHTML = '';
+    state.rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).forEach(function(r){
+      tbody.appendChild(buildRow(r));
+    });
+    var pager = document.getElementById('pager');
+    pager.classList.toggle('show', state.rows.length > PAGE_SIZE);
+    document.getElementById('pageInfo').textContent = page + ' / ' + tp + ' 페이지 (총 ' + state.rows.length + '행)';
+    document.getElementById('prev').disabled = page <= 1;
+    document.getElementById('next').disabled = page >= tp;
+    updateOutputs();
+  }
+
+  /* ---------- 이벤트 ---------- */
+  unitSel.addEventListener('change', function(){
+    var oldF = unitFactor();
+    var newUnit = unitSel.value === 'g' ? 'g' : 'mg';
+    var b = state.rows[0];
+    var pm = parseNum(b.mass);
+    state.unit = newUnit;
+    if(pm.ok){ // 입력된 질량을 같은 물리량으로 환산
+      var mg = pm.n * oldF;
+      var conv = mg / unitFactor();
+      b.mass = String(parseFloat(conv.toPrecision(10)));
+    }
+    saveState(); render();
+  });
+
+  document.getElementById('add').addEventListener('click', function(){
+    var r = newRow();
+    state.rows.push(r);
+    page = totalPages();
+    saveState(); render();
+    var inp = tbody.querySelector('tr[data-id="' + r.id + '"] input[data-field="name"]');
+    if(inp) inp.focus();
+  });
+
+  document.getElementById('reset').addEventListener('click', function(){
+    state = defaultState();
+    page = 1;
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    render();
+  });
+
+  document.getElementById('prev').addEventListener('click', function(){ if(page > 1){ page--; render(); } });
+  document.getElementById('next').addEventListener('click', function(){ if(page < totalPages()){ page++; render(); } });
+
+  document.getElementById('csv').addEventListener('click', function(){
+    var base = baseInfo();
+    var lines = [['구분','시약명','분자량(MW)','당량(eq)','투입 질량','물질량(mmol)']];
+    state.rows.forEach(function(r){
+      var res = computeRow(r, base);
+      var mass = res.mass, mmol = res.mmol;
+      var mw = r.mw, eq = r.eq;
+      if(r.type === 'base'){
+        var pm = parseNum(r.mass);
+        mass = pm.ok ? fmt(pm.n) + ' ' + state.unit : (r.mass || '-');
+        eq = '1.00';
+      } else if(r.type === 'solvent'){
+        mw = '-'; eq = '-';
+      }
+      lines.push([r.type === 'base' ? '기준 시약' : TYPE_LABEL[r.type], r.name, mw || '-', eq || '-', mass, mmol]);
+    });
+    var csv = lines.map(function(row){
+      return row.map(function(v){ return '"' + String(v).replace(/"/g, '""') + '"'; }).join(',');
+    }).join('\r\n');
+    var blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '반응물_투입량_계산.csv';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 1000);
+  });
+
+  render();
+})();
+</script>
+
+<script>
+/* ===== 인트로: 슬라이드 스위치 → 효과음 → 마스코트 → 계산기 활성화 ===== */
+(function(){
+  // ▼ 필요하면 아래 두 URL만 원하는 https:// 주소로 바꾸세요.
+  var SOUND_URL = ''; // 비워 두면 내장 '샤라락' 효과음 사용. 원하는 효과음 https:// 주소를 넣으면 그 소리 재생
+  var MASCOT_IMAGE_URL = ''; // 비워 두면 내장 토끼 SVG 사용. 이미지(.gif/.png/.webp) 또는 영상(.mp4/.webm) https:// 직접 주소를 넣으면 그 파일 사용
+
+  var app = document.getElementById('app');
+  var intro = document.getElementById('intro');
+  var card = document.getElementById('introCard');
+  var slide = document.getElementById('slide');
+  var fill = document.getElementById('slideFill');
+  var knob = document.getElementById('knob');
+  var mascot = document.getElementById('mascot');
+  var art = document.getElementById('mascotArt');
+
+  if(MASCOT_IMAGE_URL){
+    if(/\.(mp4|webm)(\?|#|$)/i.test(MASCOT_IMAGE_URL)){
+      // X(트위터)의 GIF는 mp4 영상이므로 반복 재생되는 video로 표시
+      var vid = document.createElement('video');
+      vid.muted = true; vid.loop = true; vid.autoplay = true; vid.playsInline = true;
+      vid.setAttribute('playsinline', '');
+      vid.style.cssText = 'width:100%;height:auto;display:block';
+      vid.addEventListener('loadeddata', function(){
+        art.innerHTML = ''; art.appendChild(vid);
+        var p = vid.play(); if(p && p.catch) p.catch(function(){});
+      });
+      vid.src = MASCOT_IMAGE_URL; // 로드 실패 시 내장 SVG 유지
+    } else {
+      var img = new Image();
+      img.alt = '마스코트';
+      img.onload = function(){ art.innerHTML = ''; art.appendChild(img); };
+      img.src = MASCOT_IMAGE_URL; // 로드 실패 시 내장 SVG 유지
+    }
+  }
+
+  var started = false, dragging = false, offset = 0, x = 0;
+
+  function maxX(){ return Math.max(0, slide.clientWidth - knob.offsetWidth - 8); }
+  function setX(v){
+    x = v;
+    knob.style.transform = 'translateX(' + v + 'px)';
+    fill.style.width = (v + knob.offsetWidth + 4) + 'px';
+    if(v === 0) fill.style.width = '0';
+  }
+
+  // '샤라락' : 높은 음이 빠르게 올라가는 반짝임 소리를 Web Audio로 합성
+  function playSparkle(){
+    try{
+      var AC = window.AudioContext || window.webkitAudioContext;
+      if(!AC) return;
+      var ctx = new AC();
+      var t0 = ctx.currentTime + 0.02;
+      var master = ctx.createGain();
+      master.gain.value = 0.3;
+      master.connect(ctx.destination);
+      var notes = [1047, 1319, 1568, 1760, 2093, 2349, 2637, 3136, 3520, 4186];
+      notes.forEach(function(f, i){
+        var t = t0 + i * 0.05;
+        [1, 2].forEach(function(mult, k){          // 기본음 + 한 옥타브 위(은은하게)
+          var o = ctx.createOscillator();
+          var g = ctx.createGain();
+          o.type = k === 0 ? 'sine' : 'triangle';
+          o.frequency.value = f * mult;
+          o.detune.value = (Math.random() - 0.5) * 14;
+          var peak = k === 0 ? 0.5 : 0.12;
+          g.gain.setValueAtTime(0.0001, t);
+          g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+          g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+          o.connect(g); g.connect(master);
+          o.start(t); o.stop(t + 0.5);
+        });
+      });
+      setTimeout(function(){ try{ ctx.close(); }catch(e){} }, 2000);
+    }catch(e){}
+  }
+  function playSound(){
+    if(!SOUND_URL){ playSparkle(); return; }
+    try{
+      var a = new Audio(SOUND_URL);
+      a.addEventListener('error', playSparkle);   // URL이 안 열리면 내장 효과음으로 대체
+      var p = a.play();
+      if(p && p.catch) p.catch(playSparkle);
+    }catch(e){ playSparkle(); }
+  }
+
+  function finish(){
+    if(finish.done) return;
+    finish.done = true;
+    intro.classList.add('hide');
+    app.removeAttribute('inert');
+    setTimeout(function(){ intro.style.display = 'none'; }, 500);
+  }
+
+  function start(){
+    if(started) return;
+    started = true;
+    setX(maxX());
+    slide.classList.add('on');
+    knob.setAttribute('aria-checked', 'true');
+
+    playSound();                                   // 효과음
+    mascot.classList.add('show');                  // 팝업 등장
+    setTimeout(function(){ card.classList.add('gone'); }, 350);
+
+    setTimeout(function(){                         // 2초 뒤 우측 하단으로 이동
+      mascot.classList.add('docked');
+      var done = false;
+      function end(){ if(done) return; done = true; finish(); }
+      mascot.addEventListener('transitionend', function(e){
+        if(e.propertyName === 'top' || e.propertyName === 'left') end();
+      });
+      setTimeout(end, 1300);                       // 안전장치
+    }, 2000);
+  }
+
+  knob.addEventListener('pointerdown', function(e){
+    if(started) return;
+    dragging = true;
+    offset = e.clientX - x;
+    knob.classList.add('drag');
+    slide.classList.add('drag-active');
+    try{ knob.setPointerCapture(e.pointerId); }catch(err){}
+    e.preventDefault();
+  });
+  knob.addEventListener('pointermove', function(e){
+    if(!dragging) return;
+    setX(Math.min(maxX(), Math.max(0, e.clientX - offset)));
+  });
+  function release(){
+    if(!dragging) return;
+    dragging = false;
+    knob.classList.remove('drag');
+    slide.classList.remove('drag-active');
+    if(x >= maxX() * 0.85) start(); else setX(0);
+  }
+  knob.addEventListener('pointerup', release);
+  knob.addEventListener('pointercancel', release);
+
+  knob.addEventListener('keydown', function(e){   // 키보드 접근성
+    if(e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowRight'){ e.preventDefault(); start(); }
+  });
+})();
+</script>
+
+<script>
+/* ===== 시약명 자동완성 (이벤트 위임: 새로 추가된 행에서도 동일하게 동작) ===== */
+(function(){
+  // [영문명, 한글명, 분자량(g/mol)] — 서버/DB 없이 코드 내부에 하드코딩
+  var REAGENTS = [
+    ['Benzoic acid','벤조산','122.12'], ['Ethanol','에탄올','46.07'], ['Methanol','메탄올','32.04'],
+    ['Dichloromethane','디클로로메탄','84.93'], ['Toluene','톨루엔','92.14'], ['NaCl','염화나트륨','58.44'],
+    ['NaOH','수산화나트륨','40.00'], ['HCl','염산','36.46'], ['Sulfuric acid','황산','98.08'],
+    ['Acetic acid','아세트산','60.05'], ['Acetone','아세톤','58.08'], ['Ethyl acetate','아세트산에틸','88.11'],
+    ['Hexane','헥세인','86.18'], ['Diethyl ether','다이에틸에터','74.12'],
+    ['Tetrahydrofuran (THF)','테트라하이드로퓨란','72.11'], ['Dimethylformamide (DMF)','다이메틸폼아마이드','73.09'],
+    ['Dimethyl sulfoxide (DMSO)','다이메틸설폭사이드','78.13'], ['Acetonitrile','아세토니트릴','41.05'],
+    ['Chloroform','클로로폼','119.38'], ['Aniline','아닐린','93.13'], ['Benzaldehyde','벤즈알데히드','106.12'],
+    ['Benzyl alcohol','벤질알코올','108.14'], ['Sodium bicarbonate','탄산수소나트륨','84.01'],
+    ['Potassium carbonate','탄산칼륨','138.21'], ['Triethylamine','트리에틸아민','101.19'],
+    ['Pyridine','피리딘','79.10'], ['Acetic anhydride','무수아세트산','102.09'], ['Nitric acid','질산','63.01'],
+    ['Magnesium sulfate','황산마그네슘','120.37'], ['Sodium borohydride','수소화붕소나트륨','37.83'],
+    ['Salicylic acid','살리실산','138.12'], ['Acetylsalicylic acid (Aspirin)','아세틸살리실산','180.16']
+  ];
+  var MAX_ITEMS = 8;
+
+  var tbody = document.getElementById('tbody');
+  var list = document.createElement('div');
+  list.id = 'acList';
+  list.setAttribute('role', 'listbox');
+  list.tabIndex = -1; // 스크롤바를 눌러도 입력창 blur로 목록이 닫히지 않도록 처리
+  document.body.appendChild(list);
+
+  var cur = null, items = [], active = -1, selecting = false;
+
+  function close(){
+    list.style.display = 'none';
+    list.innerHTML = '';
+    cur = null; items = []; active = -1;
+  }
+  function position(){
+    if(!cur) return;
+    var r = cur.getBoundingClientRect();
+    list.style.left = r.left + 'px';
+    list.style.top = (r.bottom + 2) + 'px';
+    list.style.minWidth = Math.max(r.width, 220) + 'px';
+  }
+  function setActive(i){
+    active = i;
+    Array.prototype.forEach.call(list.children, function(el, idx){
+      el.classList.toggle('active', idx === i);
+      if(idx === i) el.scrollIntoView({ block: 'nearest' });
+    });
+  }
+  function choose(i){
+    var inp = cur, name = items[i] && items[i][0], mw = items[i] && items[i][2];
+    if(!inp || !name) return;
+    selecting = true;
+    inp.value = name;
+    inp.dispatchEvent(new Event('input', { bubbles: true })); // 기존 저장/계산 로직이 값을 반영
+    // 같은 행의 분자량 칸에도 자동 입력 (용매 행처럼 MW 칸이 없으면 건너뜀)
+    var tr = inp.closest('tr');
+    var mwInp = tr && tr.querySelector('input[data-field="mw"]');
+    if(mwInp && mw){
+      mwInp.value = mw;
+      mwInp.dispatchEvent(new Event('input', { bubbles: true })); // 저장 + 투입 질량/물질량 재계산
+    }
+    selecting = false;
+    close();
+    inp.focus();
+  }
+  function esc(s){ return s.replace(/[&<>"]/g, function(c){ return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]; }); }
+  function highlight(text, q){
+    var i = text.toLowerCase().indexOf(q);
+    if(i < 0) return esc(text);
+    return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + q.length)) + '</mark>' + esc(text.slice(i + q.length));
+  }
+
+  function show(inp){
+    var q = inp.value.trim().toLowerCase();
+    if(!q){ close(); return; }
+    var starts = [], inc = [];
+    REAGENTS.forEach(function(r){
+      var en = r[0].toLowerCase(), ko = r[1];
+      if(en.indexOf(q) === 0 || ko.indexOf(q) === 0) starts.push(r);
+      else if(en.indexOf(q) > -1 || ko.indexOf(q) > -1) inc.push(r);
+    });
+    items = starts.concat(inc).slice(0, MAX_ITEMS);
+    if(!items.length || (items.length === 1 && items[0][0].toLowerCase() === q)){ close(); return; }
+    cur = inp;
+    list.innerHTML = '';
+    items.forEach(function(r, i){
+      var d = document.createElement('div');
+      d.className = 'ac-item';
+      d.setAttribute('role', 'option');
+      d.dataset.idx = i;
+      d.innerHTML = '<span>' + highlight(r[0], q) + '</span><span class="ko">' + highlight(r[1], q) + '</span>' +
+        '<span class="mw">MW ' + esc(r[2]) + '</span>';
+      list.appendChild(d);
+    });
+    active = -1;
+    list.style.display = 'block';
+    position();
+  }
+
+  function isNameInput(t){ return t && t.matches && t.matches('input[data-field="name"]'); }
+
+  tbody.addEventListener('input', function(e){
+    if(selecting) return;
+    if(isNameInput(e.target)) show(e.target); else if(cur) close();
+  });
+  tbody.addEventListener('focusin', function(e){
+    if(isNameInput(e.target) && e.target.value.trim()) show(e.target);
+  });
+  tbody.addEventListener('focusout', function(e){
+    if(e.target === cur && e.relatedTarget !== list) close();
+  });
+  tbody.addEventListener('keydown', function(e){
+    if(!cur || e.target !== cur || !items.length) return;
+    if(e.key === 'ArrowDown'){ e.preventDefault(); setActive((active + 1) % items.length); }
+    else if(e.key === 'ArrowUp'){ e.preventDefault(); setActive(active <= 0 ? items.length - 1 : active - 1); }
+    else if(e.key === 'Enter'){ if(active >= 0){ e.preventDefault(); choose(active); } else close(); }
+    else if(e.key === 'Escape' || e.key === 'Tab'){ close(); }
+  });
+
+  // 마우스 선택: mousedown에서 처리해 입력창 blur 전에 값이 채워지도록 함
+  list.addEventListener('mousedown', function(e){
+    var el = e.target.closest ? e.target.closest('.ac-item') : null;
+    if(el){ e.preventDefault(); choose(Number(el.dataset.idx)); }
+    // 항목이 아닌 곳(스크롤바 등)은 기본 동작을 막지 않아 스크롤바 드래그가 가능
+  });
+  list.addEventListener('focusout', function(e){
+    if(e.relatedTarget !== cur && !list.contains(e.relatedTarget)) close();
+  });
+
+  // 표가 다시 그려지거나 화면(페이지)이 스크롤되면 목록 닫기
+  new MutationObserver(close).observe(tbody, { childList: true });
+  window.addEventListener('scroll', function(e){
+    if(e.target && list.contains(e.target)) return; // 목록 자체의 스크롤은 무시 (스크롤 버그 수정)
+    close();
+  }, true);
+  window.addEventListener('resize', position); // 모바일 주소창 변화로 닫히지 않도록 위치만 재계산
+})();
+</script>
+
+<script>
+/* ===== 클릭 가능한 마스코트(실험복) + 실험 메모장 (로컬 스토리지 자동 저장) ===== */
+(function(){
+  var KEY = 'chemCalcMemo_v1';
+  var mascot = document.getElementById('mascot');
+  var intro = document.getElementById('intro');
+  var memo = document.getElementById('memo');
+  var ta = document.getElementById('memoText');
+  var status = document.getElementById('memoStatus');
+  var closeBtn = document.getElementById('memoClose');
+  var ready = false, timer = null;
+
+  try{ ta.value = localStorage.getItem(KEY) || ''; }catch(e){}
+
+  function save(){
+    clearTimeout(timer); timer = null;
+    try{ localStorage.setItem(KEY, ta.value); status.textContent = '자동 저장됨 ✓'; }
+    catch(e){ status.textContent = '저장할 수 없습니다 (브라우저 설정 확인)'; }
+  }
+  ta.addEventListener('input', function(){
+    status.textContent = '저장 중…';
+    clearTimeout(timer);
+    timer = setTimeout(save, 250);
+  });
+  window.addEventListener('beforeunload', function(){ if(timer) save(); });
+
+  function openMemo(){
+    memo.classList.add('open');
+    mascot.classList.add('coat-on');                 // 실험복 착용
+    mascot.setAttribute('aria-expanded', 'true');
+    setTimeout(function(){ ta.focus(); }, 60);
+  }
+  function closeMemo(){
+    if(timer) save();
+    memo.classList.remove('open');
+    mascot.classList.remove('coat-on');              // 실험복 벗기
+    mascot.setAttribute('aria-expanded', 'false');
+  }
+  function toggle(){
+    if(!ready) return;
+    if(memo.classList.contains('open')) closeMemo(); else openMemo();
+  }
+
+  function enable(){
+    if(ready) return;
+    ready = true;
+    mascot.classList.add('ready');
+    mascot.removeAttribute('aria-hidden');
+    mascot.setAttribute('role', 'button');
+    mascot.setAttribute('tabindex', '0');
+    mascot.setAttribute('aria-label', '실험 메모장 열기');
+    mascot.setAttribute('aria-expanded', 'false');
+  }
+
+  mascot.addEventListener('click', toggle);
+  mascot.addEventListener('keydown', function(e){
+    if(e.key === 'Enter' || e.key === ' '){ e.preventDefault(); toggle(); }
+  });
+  closeBtn.addEventListener('click', closeMemo);
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape' && memo.classList.contains('open')) closeMemo();
+  });
+
+  // 인트로 애니메이션이 끝나(intro에 hide 클래스가 붙)면 마스코트를 클릭 가능하게 전환
+  if(intro.classList.contains('hide')){
+    enable();
+  } else {
+    var mo = new MutationObserver(function(){
+      if(intro.classList.contains('hide')){ enable(); mo.disconnect(); }
+    });
+    mo.observe(intro, { attributes: true, attributeFilter: ['class'] });
+  }
+})();
+</script>
+</body>
+</html>
